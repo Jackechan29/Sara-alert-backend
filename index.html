@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SARA Alert - Site Manager</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .site-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .site-code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .site-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .instructions {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .instructions h3 {
+            color: #0066cc;
+            margin-top: 0;
+        }
+        .code-display {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 18px;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .qr-code {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .qr-code img {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .api-info {
+            background: #f0f8ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .api-info h3 {
+            color: #0066cc;
+            margin-top: 0;
+        }
+        .api-url {
+            background: #000;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ SARA Alert - Site Manager</h1>
+        
+        <div class="instructions">
+            <h3>📱 How to Use:</h3>
+            <ol>
+                <li><strong>Managers:</strong> Create sites in the app and share the site codes below</li>
+                <li><strong>Workers/Visitors:</strong> Use the site codes below to join sites</li>
+                <li><strong>All Users:</strong> Download the SARA Alert app from TestFlight</li>
+            </ol>
+        </div>
+
+        <div class="api-info">
+            <h3>🌐 Backend API Status:</h3>
+            <p><strong>API URL:</strong></p>
+            <div class="api-url">https://backend-pi-wheat-15.vercel.app/api</div>
+            <p>✅ Backend is online and working!</p>
+        </div>
+
+        <h2>🎯 Available Sites:</h2>
+        
+        <div class="site-card">
+            <div class="site-name">Test Construction Site</div>
+            <div class="site-code">TEST1</div>
+            <div class="code-display">TEST1</div>
+            <div class="qr-code">
+                <div>📱 Scan this QR code or enter: <strong>TEST1</strong></div>
+            </div>
+        </div>
+
+        <div class="site-card">
+            <div class="site-name">Demo Building Project</div>
+            <div class="site-code">DEMO2</div>
+            <div class="code-display">DEMO2</div>
+            <div class="qr-code">
+                <div>📱 Scan this QR code or enter: <strong>DEMO2</strong></div>
+            </div>
+        </div>
+
+        <div class="site-card">
+            <div class="site-name">Sample Renovation</div>
+            <div class="site-code">SAMP3</div>
+            <div class="code-display">SAMP3</div>
+            <div class="qr-code">
+                <div>📱 Scan this QR code or enter: <strong>SAMP3</strong></div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>🚀 Next Steps:</h3>
+            <ol>
+                <li>Share this page with your team</li>
+                <li>Tell them to download SARA Alert from TestFlight</li>
+                <li>Use the site codes above to join sites</li>
+                <li>Test the alert system!</li>
+            </ol>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; color: #666;">
+            <p>💡 <strong>Tip:</strong> You can create custom sites in the app, but these sample sites work for everyone!</p>
+            <p>🔗 <strong>Backend API:</strong> <a href="https://backend-pi-wheat-15.vercel.app/api/health" target="_blank">Check API Status</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Test API connection
+        fetch('https://backend-pi-wheat-15.vercel.app/api/health')
+            .then(response => response.json())
+            .then(data => {
+                console.log('API Status:', data);
+                if (data.status === 'ok') {
+                    document.querySelector('.api-info p:last-child').innerHTML = '✅ Backend is online and working!';
+                } else {
+                    document.querySelector('.api-info p:last-child').innerHTML = '❌ Backend is offline';
+                }
+            })
+            .catch(error => {
+                console.error('API Error:', error);
+                document.querySelector('.api-info p:last-child').innerHTML = '❌ Backend is offline';
+            });
+    </script>
+</body>
+</html>
