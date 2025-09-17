@@ -174,6 +174,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Initialize sample sites (for Vercel deployment)
+app.post('/api/init-samples', (req, res) => {
+  if (sites.length === 0) {
+    initializeSampleSites();
+    res.json({ success: true, message: 'Sample sites initialized', sites: sites.length });
+  } else {
+    res.json({ success: true, message: 'Sample sites already initialized', sites: sites.length });
+  }
+});
+
 // Initialize with sample sites
 const initializeSampleSites = () => {
   const sampleSites = [
@@ -207,11 +217,13 @@ const initializeSampleSites = () => {
   console.log('Sample sites initialized:', sampleSites.map(s => s.siteCode));
 };
 
+// Initialize sample sites immediately for Vercel
+initializeSampleSites();
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 SARA Alert Backend Server running on port ${PORT}`);
   console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
-  initializeSampleSites();
 });
 
 module.exports = app;
