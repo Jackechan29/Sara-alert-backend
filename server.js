@@ -147,6 +147,11 @@ app.post('/api/alerts', (req, res) => {
   res.json(newAlert);
 });
 
+// Get all alerts
+app.get('/api/alerts', (req, res) => {
+  res.json(alerts);
+});
+
 // Get site alerts
 app.get('/api/sites/:id/alerts', (req, res) => {
   const { id } = req.params;
