@@ -9,6 +9,11 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Simple tRPC-like endpoint for compatibility
+app.get('/api/trpc/example.hi', (req, res) => {
+  res.json({ result: { data: "Hello from tRPC!" } });
+});
+
 // In-memory storage (in production, use a real database)
 let sites = [];
 let users = [];
