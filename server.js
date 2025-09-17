@@ -111,6 +111,56 @@ app.post('/api/sites/:id/join', (req, res) => {
   res.json({ success: true, site });
 });
 
+// Get all users
+app.get('/api/users', (req, res) => {
+  res.json(users);
+});
+
+// Create or update user
+app.post('/api/users', (req, res) => {
+  const { id, name, role, siteId } = req.body;
+  
+  if (!id || !name || !role) {
+    return res.status(400).json({ error: 'id, name, and role are required' });
+  }
+
+  const existingUser = users.find(u => u.id === id);
+  
+  if (existingUser) {
+    // Update existing user
+    existingUser.name = name;
+    existingUser.role = role;
+    existingUser.siteId = siteId || null;
+    existingUser.lastActive = Date.now();
+    res.json(existingUser);
+  } else {
+    // Create new user
+    const newUser = {
+      id,
+      name,
+      role,
+      siteId: siteId || null,
+      acknowledged: false,
+      needsHelp: false,
+      lastActive: Date.now()
+    };
+    users.push(newUser);
+    res.json(newUser);
+  }
+});
+
+// Get user by ID
+app.get('/api/users/:id', (req, res) => {
+  const { id } = req.params;
+  const user = users.find(u => u.id === id);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  res.json(user);
+});
+
 // Get site users
 app.get('/api/sites/:id/users', (req, res) => {
   const { id } = req.params;
