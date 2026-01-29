@@ -1,12 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const { MongoClient } = require('mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// MongoDB for toolbox talks (persists across Vercel serverless requests)
+// MongoDB for toolbox talks (optional – only load when MONGODB_URI is set to avoid Vercel crash)
 let mongoClient = null;
 let mongoDb = null;
 async function getDb() {
@@ -14,6 +13,7 @@ async function getDb() {
   const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
   if (!uri) return null;
   try {
+    const { MongoClient } = require('mongodb');
     mongoClient = new MongoClient(uri);
     await mongoClient.connect();
     const dbName = (uri.match(/\/([^/?]+)(\?|$)/) || [null, 'sara-alert'];
