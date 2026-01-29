@@ -368,10 +368,12 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error', message: err.message || 'Something went wrong' });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 SARA Alert Backend Server running on port ${PORT}`);
-  console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
-});
+// Start server only when not on Vercel (serverless uses exported app only)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 SARA Alert Backend Server running on port ${PORT}`);
+    console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
+  });
+}
 
 module.exports = app;
