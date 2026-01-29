@@ -1,9 +1,10 @@
 const express = require('express');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
 // MongoDB for toolbox talks (optional – only load when MONGODB_URI is set to avoid Vercel crash)
 let mongoClient = null;
@@ -16,8 +17,13 @@ async function getDb() {
     const { MongoClient } = require('mongodb');
     mongoClient = new MongoClient(uri);
     await mongoClient.connect();
-    const dbName = (uri.match(/\/([^/?]+)(\?|$)/) || [null, 'sara-alert'];
-    mongoDb = mongoClient.db(dbName[1] || 'sara-alert');
+    let dbName = 'sara-alert';
+    try {
+      const withoutQuery = uri.split('?')[0];
+      const parts = withoutQuery.split('/').filter(Boolean);
+      if (parts.length > 0) dbName = parts[parts.length - 1];
+    } catch (_) {}
+    mongoDb = mongoClient.db(dbName);
     console.log('MongoDB connected for toolbox talks');
     return mongoDb;
   } catch (e) {
