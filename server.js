@@ -70,7 +70,7 @@ app.post('/api/sites', (req, res) => {
     }
 
     const newSite = {
-      id: uuidv4(),
+      id: generateId(),
       name,
       siteCode: generateSiteCode(),
       createdAt: Date.now(),
@@ -81,8 +81,9 @@ app.post('/api/sites', (req, res) => {
     sites.push(newSite);
     res.json(newSite);
   } catch (e) {
-    console.error('POST /api/sites error:', e);
-    res.status(500).json({ error: 'Failed to create site', message: e.message });
+    const errMsg = e instanceof Error ? e.message : (e != null && typeof e.toString === 'function' ? e.toString() : 'Unknown error');
+    console.error('POST /api/sites error:', errMsg, e);
+    res.status(500).json({ error: 'Failed to create site', message: errMsg });
   }
 });
 
@@ -206,7 +207,7 @@ app.post('/api/alerts', (req, res) => {
   }
 
   const newAlert = {
-    id: uuidv4(),
+    id: generateId(),
     siteId,
     type,
     timestamp: Date.now(),
