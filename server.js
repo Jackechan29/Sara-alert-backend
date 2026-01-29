@@ -18,6 +18,7 @@ app.get('/api/trpc/example.hi', (req, res) => {
 let sites = [];
 let users = [];
 let alerts = [];
+let toolboxTalks = [];
 
 // Generate a short site code (5 characters)
 const generateSiteCode = () => {
@@ -223,6 +224,38 @@ app.post('/api/alerts/:id/acknowledge', (req, res) => {
   res.json({ success: true });
 });
 
+// Toolbox talks - GET by site
+app.get('/api/toolbox-talks', (req, res) => {
+  const siteId = req.query.siteId;
+  if (!siteId) {
+    return res.status(400).json({ error: 'Missing required parameter: siteId' });
+  }
+  const talks = toolboxTalks.filter(t => t.siteId === siteId);
+  talks.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  res.json(talks);
+});
+
+// Toolbox talks - POST create
+app.post('/api/toolbox-talks', (req, res) => {
+  const { siteId, type, message } = req.body;
+  if (!siteId || !type || !message) {
+    return res.status(400).json({ error: 'Missing required fields: siteId, type, message' });
+  }
+  const newTalk = {
+    id: `talk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    siteId,
+    type,
+    message,
+    timestamp: Date.now(),
+    isActive: true,
+    acknowledgedBy: [],
+    createdBy: siteId,
+    createdAt: new Date().toISOString()
+  };
+  toolboxTalks.push(newTalk);
+  res.json({ success: true, id: newTalk.id, ...newTalk, message: 'Toolbox talk created' });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -230,7 +263,8 @@ app.get('/api/health', (req, res) => {
     timestamp: Date.now(),
     sites: sites.length,
     users: users.length,
-    alerts: alerts.length
+    alerts: alerts.length,
+    toolboxTalks: toolboxTalks.length
   });
 });
 
