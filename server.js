@@ -1,9 +1,30 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// MongoDB for toolbox talks (persists across Vercel serverless requests)
+let mongoClient = null;
+let mongoDb = null;
+async function getDb() {
+  if (mongoDb) return mongoDb;
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
+  if (!uri) return null;
+  try {
+    mongoClient = new MongoClient(uri);
+    await mongoClient.connect();
+    const dbName = (uri.match(/\/([^/?]+)(\?|$)/) || [null, 'sara-alert'];
+    mongoDb = mongoClient.db(dbName[1] || 'sara-alert');
+    console.log('MongoDB connected for toolbox talks');
+    return mongoDb;
+  } catch (e) {
+    console.warn('MongoDB not available, toolbox talks in-memory only:', e.message);
+    return null;
+  }
+}
 
 // Middleware
 app.use(cors());
@@ -224,36 +245,56 @@ app.post('/api/alerts/:id/acknowledge', (req, res) => {
   res.json({ success: true });
 });
 
-// Toolbox talks - GET by site
-app.get('/api/toolbox-talks', (req, res) => {
-  const siteId = req.query.siteId;
-  if (!siteId) {
-    return res.status(400).json({ error: 'Missing required parameter: siteId' });
+// Toolbox talks - GET by site (MongoDB if MONGODB_URI set, else in-memory)
+app.get('/api/toolbox-talks', async (req, res) => {
+  try {
+    const siteId = req.query.siteId;
+    if (!siteId) {
+      return res.status(400).json({ error: 'Missing required parameter: siteId' });
+    }
+    const db = await getDb();
+    if (db) {
+      const talks = await db.collection('toolboxTalks').find({ siteId }).sort({ timestamp: -1 }).toArray();
+      return res.json(talks.map(({ _id, ...t }) => t));
+    }
+    const talks = toolboxTalks.filter(t => t.siteId === siteId);
+    talks.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    res.json(talks);
+  } catch (e) {
+    console.error('GET toolbox-talks error:', e);
+    res.status(500).json({ error: e.message });
   }
-  const talks = toolboxTalks.filter(t => t.siteId === siteId);
-  talks.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-  res.json(talks);
 });
 
-// Toolbox talks - POST create
-app.post('/api/toolbox-talks', (req, res) => {
-  const { siteId, type, message } = req.body;
-  if (!siteId || !type || !message) {
-    return res.status(400).json({ error: 'Missing required fields: siteId, type, message' });
+// Toolbox talks - POST create (MongoDB if MONGODB_URI set, else in-memory)
+app.post('/api/toolbox-talks', async (req, res) => {
+  try {
+    const { siteId, type, message } = req.body;
+    if (!siteId || !type || !message) {
+      return res.status(400).json({ error: 'Missing required fields: siteId, type, message' });
+    }
+    const newTalk = {
+      id: `talk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      siteId,
+      type,
+      message,
+      timestamp: Date.now(),
+      isActive: true,
+      acknowledgedBy: [],
+      createdBy: siteId,
+      createdAt: new Date().toISOString()
+    };
+    const db = await getDb();
+    if (db) {
+      await db.collection('toolboxTalks').insertOne(newTalk);
+      return res.json({ success: true, id: newTalk.id, ...newTalk, message: 'Toolbox talk created' });
+    }
+    toolboxTalks.push(newTalk);
+    res.json({ success: true, id: newTalk.id, ...newTalk, message: 'Toolbox talk created' });
+  } catch (e) {
+    console.error('POST toolbox-talks error:', e);
+    res.status(500).json({ error: e.message });
   }
-  const newTalk = {
-    id: `talk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-    siteId,
-    type,
-    message,
-    timestamp: Date.now(),
-    isActive: true,
-    acknowledgedBy: [],
-    createdBy: siteId,
-    createdAt: new Date().toISOString()
-  };
-  toolboxTalks.push(newTalk);
-  res.json({ success: true, id: newTalk.id, ...newTalk, message: 'Toolbox talk created' });
 });
 
 // Health check
