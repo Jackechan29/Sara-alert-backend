@@ -60,23 +60,30 @@ app.get('/api/sites', (req, res) => {
 
 // Create a new site
 app.post('/api/sites', (req, res) => {
-  const { name, managerId } = req.body;
-  
-  if (!name || !managerId) {
-    return res.status(400).json({ error: 'Name and managerId are required' });
+  try {
+    const body = req.body || {};
+    const name = body.name != null ? String(body.name).trim() : '';
+    const managerId = body.managerId != null ? String(body.managerId) : '';
+
+    if (!name || !managerId) {
+      return res.status(400).json({ error: 'Name and managerId are required' });
+    }
+
+    const newSite = {
+      id: uuidv4(),
+      name,
+      siteCode: generateSiteCode(),
+      createdAt: Date.now(),
+      managerId,
+      companyId: 'default-company'
+    };
+
+    sites.push(newSite);
+    res.json(newSite);
+  } catch (e) {
+    console.error('POST /api/sites error:', e);
+    res.status(500).json({ error: 'Failed to create site', message: e.message });
   }
-
-  const newSite = {
-    id: uuidv4(),
-    name: name.trim(),
-    siteCode: generateSiteCode(),
-    createdAt: Date.now(),
-    managerId,
-    companyId: 'default-company'
-  };
-
-  sites.push(newSite);
-  res.json(newSite);
 });
 
 // Get site by code
@@ -354,6 +361,12 @@ const initializeSampleSites = () => {
 
 // Initialize sample sites immediately for Vercel
 initializeSampleSites();
+
+// Global error handler – prevent serverless function crash on uncaught errors
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal Server Error', message: err.message || 'Something went wrong' });
+});
 
 // Start server
 app.listen(PORT, () => {
