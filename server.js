@@ -59,22 +59,30 @@ const generateSiteCode = () => {
 
 // Routes
 
-// Get all sites
-app.get('/api/sites', (req, res) => {
-  res.json(sites);
+// Get all sites (MongoDB if MONGODB_URI set, else in-memory)
+app.get('/api/sites', async (req, res) => {
+  try {
+    const db = await getDb();
+    if (db) {
+      const list = await db.collection('sites').find({}).sort({ createdAt: 1 }).toArray();
+      return res.json(list.map(({ _id, ...s }) => s));
+    }
+    res.json(sites);
+  } catch (e) {
+    console.error('GET sites error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Create a new site
-app.post('/api/sites', (req, res) => {
+// Create a new site (MongoDB if MONGODB_URI set, else in-memory)
+app.post('/api/sites', async (req, res) => {
   try {
     const body = req.body || {};
     const name = body.name != null ? String(body.name).trim() : '';
     const managerId = body.managerId != null ? String(body.managerId) : '';
-
     if (!name || !managerId) {
       return res.status(400).json({ error: 'Name and managerId are required' });
     }
-
     const newSite = {
       id: generateId(),
       name,
@@ -83,7 +91,11 @@ app.post('/api/sites', (req, res) => {
       managerId,
       companyId: 'default-company'
     };
-
+    const db = await getDb();
+    if (db) {
+      await db.collection('sites').insertOne(newSite);
+      return res.json(newSite);
+    }
     sites.push(newSite);
     res.json(newSite);
   } catch (e) {
@@ -93,85 +105,124 @@ app.post('/api/sites', (req, res) => {
   }
 });
 
-// Get site by code
-app.get('/api/sites/code/:code', (req, res) => {
-  const { code } = req.params;
-  const site = sites.find(s => s.siteCode === code.toUpperCase());
-  
-  if (!site) {
-    return res.status(404).json({ error: 'Site not found' });
+// Get site by code (MongoDB if set, else in-memory)
+app.get('/api/sites/code/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const db = await getDb();
+    if (db) {
+      const site = await db.collection('sites').findOne({ siteCode: code.toUpperCase() });
+      if (!site) return res.status(404).json({ error: 'Site not found' });
+      const { _id, ...s } = site;
+      return res.json(s);
+    }
+    const site = sites.find(s => s.siteCode === code.toUpperCase());
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    res.json(site);
+  } catch (e) {
+    console.error('GET site by code error:', e);
+    res.status(500).json({ error: e.message });
   }
-  
-  res.json(site);
 });
 
-// Get site by ID
-app.get('/api/sites/:id', (req, res) => {
-  const { id } = req.params;
-  const site = sites.find(s => s.id === id);
-  
-  if (!site) {
-    return res.status(404).json({ error: 'Site not found' });
+// Get site by ID (MongoDB if set, else in-memory)
+app.get('/api/sites/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDb();
+    if (db) {
+      const site = await db.collection('sites').findOne({ id });
+      if (!site) return res.status(404).json({ error: 'Site not found' });
+      const { _id, ...s } = site;
+      return res.json(s);
+    }
+    const site = sites.find(s => s.id === id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    res.json(site);
+  } catch (e) {
+    console.error('GET site by id error:', e);
+    res.status(500).json({ error: e.message });
   }
-  
-  res.json(site);
 });
 
-// Join a site
-app.post('/api/sites/:id/join', (req, res) => {
-  const { id } = req.params;
-  const { userId, userName, role } = req.body;
-  
-  const site = sites.find(s => s.id === id);
-  if (!site) {
-    return res.status(404).json({ error: 'Site not found' });
+// Join a site (MongoDB if MONGODB_URI set, else in-memory) – registers worker/visitor so counter works
+app.post('/api/sites/:id/join', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, userName, role } = req.body || {};
+    if (!userId || !userName || !role) {
+      return res.status(400).json({ error: 'userId, userName, and role are required' });
+    }
+    const db = await getDb();
+    if (db) {
+      const site = await db.collection('sites').findOne({ id });
+      if (!site) return res.status(404).json({ error: 'Site not found' });
+      const userDoc = {
+        id: userId,
+        name: String(userName),
+        role: String(role),
+        siteId: id,
+        acknowledged: false,
+        needsHelp: false,
+        lastActive: Date.now()
+      };
+      await db.collection('users').updateOne(
+        { id: userId },
+        { $set: userDoc },
+        { upsert: true }
+      );
+      const { _id, ...s } = site;
+      return res.json({ success: true, site: s });
+    }
+    const site = sites.find(s => s.id === id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const existingUser = users.find(u => u.id === userId);
+    if (existingUser) {
+      existingUser.siteId = id;
+      existingUser.name = userName;
+      existingUser.role = role;
+      existingUser.lastActive = Date.now();
+    } else {
+      users.push({
+        id: userId,
+        name: userName,
+        role,
+        siteId: id,
+        acknowledged: false,
+        needsHelp: false,
+        lastActive: Date.now()
+      });
+    }
+    res.json({ success: true, site });
+  } catch (e) {
+    console.error('POST join site error:', e);
+    res.status(500).json({ error: e.message });
   }
-
-  // Add user to site users
-  const existingUser = users.find(u => u.id === userId);
-  if (existingUser) {
-    existingUser.siteId = id;
-    existingUser.lastActive = Date.now();
-  } else {
-    users.push({
-      id: userId,
-      name: userName,
-      role,
-      siteId: id,
-      acknowledged: false,
-      needsHelp: false,
-      lastActive: Date.now()
-    });
-  }
-
-  res.json({ success: true, site });
 });
 
-// Get all users
-app.get('/api/users', (req, res) => {
-  res.json(users);
+// Get all users (MongoDB if set, else in-memory)
+app.get('/api/users', async (req, res) => {
+  try {
+    const db = await getDb();
+    if (db) {
+      const list = await db.collection('users').find({}).toArray();
+      return res.json(list.map(({ _id, ...u }) => u));
+    }
+    res.json(users);
+  } catch (e) {
+    console.error('GET users error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Create or update user
-app.post('/api/users', (req, res) => {
-  const { id, name, role, siteId } = req.body;
-  
-  if (!id || !name || !role) {
-    return res.status(400).json({ error: 'id, name, and role are required' });
-  }
-
-  const existingUser = users.find(u => u.id === id);
-  
-  if (existingUser) {
-    // Update existing user
-    existingUser.name = name;
-    existingUser.role = role;
-    existingUser.siteId = siteId || null;
-    existingUser.lastActive = Date.now();
-    res.json(existingUser);
-  } else {
-    // Create new user
-    const newUser = {
+// Create or update user (MongoDB if set, else in-memory)
+app.post('/api/users', async (req, res) => {
+  try {
+    const { id, name, role, siteId } = req.body || {};
+    if (!id || !name || !role) {
+      return res.status(400).json({ error: 'id, name, and role are required' });
+    }
+    const userDoc = {
       id,
       name,
       role,
@@ -180,69 +231,136 @@ app.post('/api/users', (req, res) => {
       needsHelp: false,
       lastActive: Date.now()
     };
-    users.push(newUser);
-    res.json(newUser);
-  }
-});
-
-// Get user by ID
-app.get('/api/users/:id', (req, res) => {
-  const { id } = req.params;
-  const user = users.find(u => u.id === id);
-  
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-  
-  res.json(user);
-});
-
-// Get site users
-app.get('/api/sites/:id/users', (req, res) => {
-  const { id } = req.params;
-  const siteUsers = users.filter(u => u.siteId === id);
-  res.json(siteUsers);
-});
-
-// Send alert
-app.post('/api/alerts', (req, res) => {
-  const { siteId, type, userId } = req.body;
-  
-  if (!siteId || !type || !userId) {
-    return res.status(400).json({ error: 'siteId, type, and userId are required' });
-  }
-
-  const newAlert = {
-    id: generateId(),
-    siteId,
-    type,
-    timestamp: Date.now(),
-    active: true,
-    date: new Date().toISOString().split('T')[0]
-  };
-
-  // Deactivate any existing active alerts for this site
-  alerts = alerts.map(alert => {
-    if (alert.siteId === siteId && alert.active) {
-      return { ...alert, active: false };
+    const db = await getDb();
+    if (db) {
+      await db.collection('users').updateOne(
+        { id },
+        { $set: userDoc },
+        { upsert: true }
+      );
+      return res.json(userDoc);
     }
-    return alert;
-  });
-
-  alerts.push(newAlert);
-  res.json(newAlert);
+    const existingUser = users.find(u => u.id === id);
+    if (existingUser) {
+      existingUser.name = name;
+      existingUser.role = role;
+      existingUser.siteId = siteId || null;
+      existingUser.lastActive = Date.now();
+      res.json(existingUser);
+    } else {
+      users.push({ ...userDoc });
+      res.json(userDoc);
+    }
+  } catch (e) {
+    console.error('POST users error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Get all alerts
-app.get('/api/alerts', (req, res) => {
-  res.json(alerts);
+// Get user by ID (MongoDB if set, else in-memory)
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDb();
+    if (db) {
+      const user = await db.collection('users').findOne({ id });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const { _id, ...u } = user;
+      return res.json(u);
+    }
+    const u = users.find(u => u.id === id);
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    res.json(u);
+  } catch (e) {
+    console.error('GET user error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Get site alerts
-app.get('/api/sites/:id/alerts', (req, res) => {
-  const { id } = req.params;
-  const siteAlerts = alerts.filter(a => a.siteId === id);
-  res.json(siteAlerts);
+// Get site users (MongoDB if set, else in-memory) – used for personnel counter
+app.get('/api/sites/:id/users', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDb();
+    if (db) {
+      const list = await db.collection('users').find({ siteId: id }).toArray();
+      return res.json(list.map(({ _id, ...u }) => u));
+    }
+    const siteUsers = users.filter(u => u.siteId === id);
+    res.json(siteUsers);
+  } catch (e) {
+    console.error('GET site users error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Send alert (MongoDB if MONGODB_URI set, else in-memory)
+app.post('/api/alerts', async (req, res) => {
+  try {
+    const { siteId, type, userId } = req.body;
+    if (!siteId || !type || !userId) {
+      return res.status(400).json({ error: 'siteId, type, and userId are required' });
+    }
+    const newAlert = {
+      id: generateId(),
+      siteId,
+      type,
+      userId,
+      timestamp: Date.now(),
+      active: true,
+      date: new Date().toISOString().split('T')[0]
+    };
+    const db = await getDb();
+    if (db) {
+      await db.collection('alerts').updateMany(
+        { siteId, active: true },
+        { $set: { active: false } }
+      );
+      await db.collection('alerts').insertOne(newAlert);
+      return res.json(newAlert);
+    }
+    alerts = alerts.map(alert => {
+      if (alert.siteId === siteId && alert.active) return { ...alert, active: false };
+      return alert;
+    });
+    alerts.push(newAlert);
+    res.json(newAlert);
+  } catch (e) {
+    console.error('POST alerts error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get all alerts (MongoDB if MONGODB_URI set, else in-memory)
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const db = await getDb();
+    if (db) {
+      const list = await db.collection('alerts').find({}).sort({ timestamp: -1 }).toArray();
+      return res.json(list.map(({ _id, ...a }) => a));
+    }
+    res.json(alerts);
+  } catch (e) {
+    console.error('GET alerts error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get site alerts (MongoDB if MONGODB_URI set, else in-memory)
+app.get('/api/sites/:id/alerts', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDb();
+    if (db) {
+      const siteAlerts = await db.collection('alerts').find({ siteId: id }).sort({ timestamp: -1 }).toArray();
+      return res.json(siteAlerts.map(({ _id, ...a }) => a));
+    }
+    const siteAlerts = alerts.filter(a => a.siteId === id);
+    res.json(siteAlerts);
+  } catch (e) {
+    console.error('GET site alerts error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Acknowledge alert
