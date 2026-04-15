@@ -46,6 +46,8 @@ let sites = [];
 let users = [];
 let alerts = [];
 let toolboxTalks = [];
+/** In-memory incidents when MongoDB is not configured */
+let incidents = [];
 
 // Generate a short site code (5 characters)
 const generateSiteCode = () => {
@@ -429,15 +431,84 @@ app.post('/api/toolbox-talks', async (req, res) => {
   }
 });
 
+// Incidents (worker reports — MongoDB when MONGODB_URI set, else in-memory)
+app.post('/api/incidents', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const siteId = body.siteId ?? body.site_id;
+    const reportedBy = body.reportedBy ?? body.reported_by ?? body.user_id;
+    const reportedByName = body.reportedByName ?? body.full_name ?? body.reported_by_name ?? '';
+    if (!siteId || !reportedBy || !String(body.title ?? '').trim() || !String(body.description ?? '').trim()) {
+      return res.status(400).json({ error: 'Missing siteId, reportedBy, title, description' });
+    }
+    const incident_id = `inc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const doc = {
+      incident_id,
+      site_id: siteId,
+      reported_by: reportedBy,
+      full_name: reportedByName,
+      title: String(body.title).trim(),
+      description: String(body.description).trim(),
+      severity: body.severity || 'minor',
+      location: body.location ? String(body.location) : '',
+      incident_type: body.type || body.incident_type || 'other',
+      status: 'open',
+      created_at: new Date(),
+    };
+    const db = await getDb();
+    if (db) {
+      await db.collection('incidents').insertOne(doc);
+    } else {
+      incidents.push(doc);
+    }
+    return res.json({ success: true, incident: doc });
+  } catch (e) {
+    console.error('POST /api/incidents error:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/incidents', async (req, res) => {
+  try {
+    const siteId = req.query.siteId;
+    if (!siteId) return res.status(400).json({ error: 'siteId required' });
+    const db = await getDb();
+    if (db) {
+      const list = await db
+        .collection('incidents')
+        .find({ site_id: siteId })
+        .sort({ created_at: -1 })
+        .limit(200)
+        .toArray();
+      return res.json(list.map(({ _id, ...r }) => r));
+    }
+    const list = incidents
+      .filter((i) => i.site_id === siteId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return res.json(list);
+  } catch (e) {
+    console.error('GET /api/incidents error:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+app.get('/api/health', async (req, res) => {
+  let incidentCount = incidents.length;
+  try {
+    const db = await getDb();
+    if (db) {
+      incidentCount = await db.collection('incidents').estimatedDocumentCount();
+    }
+  } catch (_) {}
+  res.json({
+    status: 'ok',
     timestamp: Date.now(),
     sites: sites.length,
     users: users.length,
     alerts: alerts.length,
-    toolboxTalks: toolboxTalks.length
+    toolboxTalks: toolboxTalks.length,
+    incidents: incidentCount,
   });
 });
 
