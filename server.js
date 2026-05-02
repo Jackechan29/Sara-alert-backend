@@ -36,9 +36,9 @@ async function getDb() {
 app.use(cors());
 app.use(express.json());
 
-// Personnel / presence (MongoDB siteUsers) — Stage 2
+// Personnel / presence (MongoDB siteUsers when URI set; else in-memory array)
 const createPresenceRoutes = require('./deploy/express-presence-routes');
-app.use('/api', createPresenceRoutes({ getDb }));
+app.use('/api', createPresenceRoutes({ getDb, memoryUsers: sitePresenceUsers }));
 
 // Simple tRPC-like endpoint for compatibility
 app.get('/api/trpc/example.hi', (req, res) => {
@@ -52,6 +52,8 @@ let alerts = [];
 let toolboxTalks = [];
 /** In-memory incidents when MongoDB is not configured */
 let incidents = [];
+/** In-memory site presence when MongoDB is not configured (same pattern as incidents) */
+let sitePresenceUsers = [];
 
 // Generate a short site code (5 characters)
 const generateSiteCode = () => {

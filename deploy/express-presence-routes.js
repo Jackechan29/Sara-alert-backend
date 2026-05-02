@@ -1,12 +1,11 @@
 /**
- * Express `/api/site-users*` routes for production (MongoDB).
- * Intended for **Sara-alert-backend** (Vercel Express) when mounted after DB connection.
+ * Express `/api/site-users*` routes for production.
+ * Uses MongoDB `siteUsers` when `getDb()` returns a db; otherwise optional `memoryUsers` array
+ * (same pattern as incidents/sites in Sara-alert-backend when MONGODB_URI is unset).
  *
  * Usage:
- *   const createPresenceRoutes = require('./deploy/express-presence-routes');
- *   app.use('/api', createPresenceRoutes({ getDb }));
- *
- * `getDb` must return a Promise resolving to a MongoDB `Db` instance (same URI as incidents/alerts).
+ *   const sitePresenceUsers = [];
+ *   app.use('/api', createPresenceRoutes({ getDb, memoryUsers: sitePresenceUsers }));
  */
 
 'use strict';
@@ -34,25 +33,66 @@ function httpStatus(err) {
   return err.statusCode || err.status || 500;
 }
 
-module.exports = function createPresenceRoutes({ getDb }) {
+/** Minimal Mongo-like API over an array (serverless in-memory fallback). */
+function memorySiteUsersCollection(rows) {
+  return {
+    find(filter) {
+      return {
+        toArray: async () =>
+          rows.filter((u) => {
+            if (filter.on_site !== undefined && u.on_site !== filter.on_site) return false;
+            if (filter.siteId !== undefined && u.siteId !== filter.siteId) return false;
+            return true;
+          }),
+      };
+    },
+    findOne(query) {
+      const u = rows.find((r) => r.id === query.id && r.siteId === query.siteId) || null;
+      return Promise.resolve(u);
+    },
+    updateOne(filter, update, options = {}) {
+      const idx = rows.findIndex((r) => {
+        if (r.id !== filter.id || r.siteId !== filter.siteId) return false;
+        if (filter.on_site !== undefined && r.on_site !== filter.on_site) return false;
+        return true;
+      });
+      const $set = update.$set || {};
+      const $setOnInsert = update.$setOnInsert || {};
+      if (idx >= 0) {
+        rows[idx] = { ...rows[idx], ...$set };
+        return Promise.resolve({ matchedCount: 1, modifiedCount: 1, upsertedCount: 0 });
+      }
+      if (options.upsert) {
+        rows.push({ id: filter.id, siteId: filter.siteId, ...$setOnInsert, ...$set });
+        return Promise.resolve({ matchedCount: 0, modifiedCount: 0, upsertedCount: 1 });
+      }
+      return Promise.resolve({ matchedCount: 0, modifiedCount: 0, upsertedCount: 0 });
+    },
+  };
+}
+
+module.exports = function createPresenceRoutes({ getDb, memoryUsers }) {
   if (typeof getDb !== 'function') {
-    throw new Error('createPresenceRoutes({ getDb }) requires getDb() => Promise<Db>');
+    throw new Error('createPresenceRoutes({ getDb }) requires getDb() => Promise<Db|null>');
   }
 
   let indexEnsured = false;
   async function siteUsersColl() {
     const db = await getDb();
-    if (!db) {
-      const e = new Error('MongoDB not configured (MONGODB_URI required for personnel)');
-      e.statusCode = 503;
-      throw e;
+    if (db) {
+      const coll = db.collection('siteUsers');
+      if (!indexEnsured) {
+        indexEnsured = true;
+        await coll.createIndex({ id: 1, siteId: 1 }, { unique: true }).catch(() => {});
+      }
+      return coll;
     }
-    const coll = db.collection('siteUsers');
-    if (!indexEnsured) {
-      indexEnsured = true;
-      await coll.createIndex({ id: 1, siteId: 1 }, { unique: true }).catch(() => {});
+    if (Array.isArray(memoryUsers)) {
+      return memorySiteUsersCollection(memoryUsers);
     }
-    return coll;
+    const e = new Error('MongoDB not configured and no memoryUsers fallback');
+    e.statusCode = 503;
+    throw e;
   }
 
   const router = express.Router();
