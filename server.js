@@ -32,6 +32,9 @@ async function getDb() {
   }
 }
 
+/** In-memory site presence when MongoDB is not configured (same pattern as incidents) */
+let sitePresenceUsers = [];
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -52,8 +55,6 @@ let alerts = [];
 let toolboxTalks = [];
 /** In-memory incidents when MongoDB is not configured */
 let incidents = [];
-/** In-memory site presence when MongoDB is not configured (same pattern as incidents) */
-let sitePresenceUsers = [];
 
 // Generate a short site code (5 characters)
 const generateSiteCode = () => {
