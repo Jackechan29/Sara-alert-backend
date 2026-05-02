@@ -36,6 +36,10 @@ async function getDb() {
 app.use(cors());
 app.use(express.json());
 
+// Personnel / presence (MongoDB siteUsers) — Stage 2
+const createPresenceRoutes = require('./deploy/express-presence-routes');
+app.use('/api', createPresenceRoutes({ getDb }));
+
 // Simple tRPC-like endpoint for compatibility
 app.get('/api/trpc/example.hi', (req, res) => {
   res.json({ result: { data: "Hello from tRPC!" } });
